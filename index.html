@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dive Gauge — Focus Timer</title>
+<style>
+  :root {
+    --surface-top: #a9e6ec;
+    --surface-mid: #4fb0cf;
+    --deep-mid: #124f78;
+    --deep-low: #0a2c48;
+    --deep-floor: #041220;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    background: #041220;
+  }
+
+  .scene {
+    position: relative;
+    flex: 1;
+    background: linear-gradient(
+      180deg,
+      var(--surface-top) 0%,
+      var(--surface-mid) 20%,
+      #1f7aa8 40%,
+      var(--deep-mid) 58%,
+      var(--deep-low) 76%,
+      var(--deep-floor) 100%
+    );
+    background-size: 100% 420%;
+    background-position: 0% var(--depth-pct, 0%);
+    transition: background-position 1s linear;
+    overflow: hidden;
+  }
+
+  /* gauge track */
+  .gauge {
+    position: absolute;
+    left: 22px;
+    top: 6%;
+    bottom: 6%;
+    width: 24px;
+    background: rgba(0,0,0,0.28);
+    border-radius: 12px;
+  }
+  .tick { position: absolute; left: 22px; width: 24px; height: 1px; background: rgba(255,255,255,0.35); }
+  .tick-label {
+    position: absolute; left: 50px; font-size: 11px; color: rgba(255,255,255,0.6);
+    font-family: 'Courier New', monospace; transform: translateY(-50%);
+  }
+  .sub {
+    position: absolute;
+    left: 16px;
+    width: 38px;
+    height: 16px;
+    background: #e8e3d8;
+    border-radius: 8px 8px 5px 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.45);
+    top: 6%;
+    transform: translateY(-50%);
+    transition: top 1s linear;
+    z-index: 3;
+  }
+  .sub::after {
+    content: "";
+    position: absolute; top: -7px; left: 13px;
+    width: 11px; height: 8px;
+    background: #e8e3d8;
+    border-radius: 4px 4px 0 0;
+  }
+
+  /* porthole */
+  .porthole {
+    position: absolute;
+    right: 6%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(30vw, 220px);
+    height: min(30vw, 220px);
+    border-radius: 50%;
+    background: #031324;
+    border: 10px solid #17324a;
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.05), 0 10px 26px rgba(0,0,0,0.45);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 4;
+  }
+  .porthole .mode { color: #5aa8c0; font-size: 12px; letter-spacing: 0.18em; font-weight: 700; margin-bottom: 6px; }
+  .porthole .lcd { color: #7ff0a8; font-family: 'Courier New', monospace; font-size: clamp(28px, 5vw, 46px); font-weight: 700; text-shadow: 0 0 10px rgba(127,240,168,0.6); }
+  .porthole .depth { color: #5aa8c0; font-family: 'Courier New', monospace; font-size: 13px; margin-top: 8px; letter-spacing: 0.08em; }
+  .porthole .done { color: #ffd27f; font-size: 12px; margin-top: 8px; letter-spacing: 0.05em; text-align: center; padding: 0 10px; }
+
+  /* decorations */
+  .bubble {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.35);
+    animation: rise linear infinite;
+  }
+  @keyframes rise {
+    from { transform: translateY(0); opacity: 0.9; }
+    to { transform: translateY(-110vh); opacity: 0; }
+  }
+  .kelp {
+    position: absolute;
+    bottom: 0;
+    width: 8px;
+    background: #0c3d2a;
+    border-radius: 8px 8px 0 0;
+    transform-origin: bottom center;
+    animation: sway 4s ease-in-out infinite;
+  }
+  @keyframes sway {
+    0%, 100% { transform: rotate(-4deg); }
+    50% { transform: rotate(4deg); }
+  }
+  .fish {
+    position: absolute;
+    width: 22px;
+    height: 12px;
+    background: #e8b25c;
+    border-radius: 50% / 60%;
+    animation: drift 18s linear infinite;
+  }
+  .fish::after {
+    content: "";
+    position: absolute; right: -9px; top: 1px;
+    width: 0; height: 0;
+    border-top: 6px solid transparent;
+    border-bottom: 6px solid transparent;
+    border-right: 9px solid #e8b25c;
+  }
+  @keyframes drift {
+    from { transform: translateX(-40px); }
+    to { transform: translateX(105vw); }
+  }
+
+  /* controls */
+  .dock {
+    background: #0a1420;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 14px 18px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+  }
+  .chip {
+    padding: 7px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    color: #b9c4de;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    cursor: pointer;
+  }
+  .chip.active { background: #4fb0cf; color: #04202c; border-color: #4fb0cf; font-weight: 700; }
+  .divider { width: 1px; height: 22px; background: rgba(255,255,255,0.12); margin: 0 4px; }
+  .custom-input {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 20px;
+    padding: 4px 6px 4px 14px;
+  }
+  .custom-input input {
+    width: 46px;
+    background: transparent;
+    border: none;
+    color: #f4f6fb;
+    font-size: 13px;
+    outline: none;
+  }
+  .custom-input span { color: #7c8aa8; font-size: 12px; }
+  .custom-input button {
+    padding: 5px 12px;
+    border-radius: 16px;
+    border: none;
+    background: rgba(255,255,255,0.1);
+    color: #f4f6fb;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .btn {
+    padding: 9px 18px;
+    border-radius: 20px;
+    border: none;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  .btn.primary { background: #4fb0cf; color: #04202c; }
+  .btn.ghost { background: rgba(255,255,255,0.08); color: #f4f6fb; }
+  .btn.break { background: rgba(90,200,150,0.18); color: #7fe0b4; border: 1px solid rgba(127,224,180,0.4); }
+  .btn.break.active { background: #7fe0b4; color: #04231a; }
+</style>
+</head>
+<body>
+
+  <div class="scene" id="scene">
+    <div class="gauge"></div>
+    <div class="tick" style="top:6%"></div><div class="tick-label" style="top:6%">0 ft</div>
+    <div class="tick" style="top:29%"></div><div class="tick-label" style="top:29%">250 ft</div>
+    <div class="tick" style="top:52%"></div><div class="tick-label" style="top:52%">500 ft</div>
+    <div class="tick" style="top:75%"></div><div class="tick-label" style="top:75%">750 ft</div>
+    <div class="tick" style="top:94%"></div><div class="tick-label" style="top:94%">1000 ft</div>
+
+    <div class="kelp" style="left:74%; height:90px;"></div>
+    <div class="kelp" style="left:80%; height:60px; animation-delay:1s;"></div>
+    <div class="kelp" style="left:86%; height:75px; animation-delay:2s;"></div>
+    <div class="fish" style="top:22%; animation-delay:0s;"></div>
+    <div class="fish" style="top:64%; animation-delay:7s; animation-duration:24s;"></div>
+    <div class="bubble" style="width:8px;height:8px; left:12%; animation-duration:7s;"></div>
+    <div class="bubble" style="width:5px;height:5px; left:16%; animation-duration:9s; animation-delay:2s;"></div>
+    <div class="bubble" style="width:6px;height:6px; left:9%; animation-duration:11s; animation-delay:4s;"></div>
+
+    <div class="sub" id="sub"></div>
+
+    <div class="porthole">
+      <div class="mode" id="modeLabel">FOCUS</div>
+      <div class="lcd" id="lcdTime">25:00</div>
+      <div class="depth" id="depthReadout">0 FT</div>
+      <div class="done" id="doneMsg" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div class="dock">
+    <div id="presetRow" style="display:flex; gap:10px;"></div>
+    <div class="divider"></div>
+    <div class="custom-input">
+      <input type="number" id="customMinutes" min="1" max="240" placeholder="min">
+      <span>min</span>
+      <button id="setCustom">Set</button>
+    </div>
+    <div class="divider"></div>
+    <button class="btn primary" id="startPause">Start</button>
+    <button class="btn ghost" id="resetBtn">Reset</button>
+    <button class="btn break" id="breakBtn">Take a Break</button>
+  </div>
+
+<script>
+  const FOCUS_PRESETS = [25, 50, 90];
+  const BREAK_PRESETS = [5, 10, 15];
+
+  let mode = 'focus';           // 'focus' | 'break'
+  let focusDuration = 25 * 60;
+  let breakDuration = 5 * 60;
+  let focusRemaining = focusDuration;
+  let breakRemaining = breakDuration;
+  let running = false;
+  let intervalId = null;
+  let breakStartDepth = 0;      // depth fraction captured when a break begins
+
+  const scene = document.getElementById('scene');
+  const sub = document.getElementById('sub');
+  const lcdTime = document.getElementById('lcdTime');
+  const depthReadout = document.getElementById('depthReadout');
+  const modeLabel = document.getElementById('modeLabel');
+  const doneMsg = document.getElementById('doneMsg');
+  const presetRow = document.getElementById('presetRow');
+  const startPauseBtn = document.getElementById('startPause');
+  const resetBtn = document.getElementById('resetBtn');
+  const breakBtn = document.getElementById('breakBtn');
+  const customMinutes = document.getElementById('customMinutes');
+  const setCustomBtn = document.getElementById('setCustom');
+
+  function formatTime(sec) {
+    const m = Math.floor(sec / 60).toString().padStart(2, '0');
+    const s = Math.floor(sec % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function depthFraction() {
+    if (mode === 'focus') {
+      return 1 - (focusRemaining / focusDuration);
+    }
+    return breakStartDepth * (breakRemaining / breakDuration);
+  }
+
+  function render() {
+    const remaining = mode === 'focus' ? focusRemaining : breakRemaining;
+    lcdTime.textContent = formatTime(remaining);
+    modeLabel.textContent = mode === 'focus' ? 'FOCUS' : 'BREAK';
+
+    const depth = depthFraction();
+    const depthFeet = Math.round(depth * 1000);
+    depthReadout.textContent = `${depthFeet} FT`;
+
+    const subTop = 6 + depth * 88; // travels between the 0ft and 1000ft ticks
+    sub.style.top = subTop + '%';
+    scene.style.setProperty('--depth-pct', (depth * 100) + '%');
+
+    doneMsg.style.display = remaining <= 0 ? 'block' : 'none';
+    doneMsg.textContent = mode === 'focus' ? 'Dive complete — surface or dive again' : 'Break over — ready to dive back in';
+
+    startPauseBtn.textContent = running ? 'Pause' : (remaining <= 0 ? 'Restart' : 'Start');
+    breakBtn.textContent = mode === 'break' ? 'Resume Focus' : 'Take a Break';
+    breakBtn.classList.toggle('active', mode === 'break');
+
+    renderPresets();
+  }
+
+  function renderPresets() {
+    const list = mode === 'focus' ? FOCUS_PRESETS : BREAK_PRESETS;
+    const activeMinutes = Math.round((mode === 'focus' ? focusDuration : breakDuration) / 60);
+    presetRow.innerHTML = '';
+    list.forEach(min => {
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (min === activeMinutes ? ' active' : '');
+      chip.textContent = `${min}m`;
+      chip.onclick = () => applyDuration(min * 60);
+      presetRow.appendChild(chip);
+    });
+  }
+
+  function applyDuration(seconds) {
+    if (mode === 'focus') {
+      focusDuration = seconds;
+      focusRemaining = seconds;
+    } else {
+      breakDuration = seconds;
+      breakRemaining = seconds;
+      breakStartDepth = depthFractionForCurrentFocus();
+    }
+    pause();
+    render();
+  }
+
+  function depthFractionForCurrentFocus() {
+    return 1 - (focusRemaining / focusDuration);
+  }
+
+  function tick() {
+    if (mode === 'focus') {
+      if (focusRemaining > 0) focusRemaining--;
+    } else {
+      if (breakRemaining > 0) breakRemaining--;
+    }
+    const remaining = mode === 'focus' ? focusRemaining : breakRemaining;
+    if (remaining <= 0) pause();
+    render();
+  }
+
+  function start() {
+    if (running) return;
+    const remaining = mode === 'focus' ? focusRemaining : breakRemaining;
+    if (remaining <= 0) {
+      if (mode === 'focus') focusRemaining = focusDuration;
+      else breakRemaining = breakDuration;
+    }
+    running = true;
+    intervalId = setInterval(tick, 1000);
+    render();
+  }
+
+  function pause() {
+    running = false;
+    clearInterval(intervalId);
+    render();
+  }
+
+  function toggleStartPause() {
+    running ? pause() : start();
+  }
+
+  function reset() {
+    pause();
+    if (mode === 'focus') focusRemaining = focusDuration;
+    else breakRemaining = breakDuration;
+    render();
+  }
+
+  function toggleBreak() {
+    if (mode === 'focus') {
+      breakStartDepth = depthFractionForCurrentFocus();
+      mode = 'break';
+      breakRemaining = breakDuration;
+    } else {
+      mode = 'focus';
+      focusRemaining = focusDuration;
+    }
+    pause();
+    render();
+  }
+
+  setCustomBtn.onclick = () => {
+    const val = parseInt(customMinutes.value, 10);
+    if (val > 0) {
+      applyDuration(val * 60);
+      customMinutes.value = '';
+    }
+  };
+  customMinutes.addEventListener('keydown', e => {
+    if (e.key === 'Enter') setCustomBtn.click();
+  });
+
+  startPauseBtn.onclick = toggleStartPause;
+  resetBtn.onclick = reset;
+  breakBtn.onclick = toggleBreak;
+
+  render();
+</script>
+</body>
+</html>
